@@ -1,0 +1,307 @@
+
+##set ($myPageURL = ${phenixURLNavigator.getMyPageTopURL()})
+
+
+
+<script type="text/javascript" charset="utf-8">
+
+	const PLAYER_NUM = 18;
+	const STARTING_MEMBER_NUM = 11;
+
+	const PLAYER_POSITION_TYPE_GK	= 0;
+	const PLAYER_POSITION_TYPE_DF	= 1;
+	const PLAYER_POSITION_TYPE_MF	= 2;
+	const PLAYER_POSITION_TYPE_FW	= 3;
+
+	const PLAYER_INFO_BOX_STATE_UNSET	= 0;
+	const PLAYER_INFO_BOX_STATE_CHECK	= 1;
+	const PLAYER_INFO_BOX_STATE_SELECT	= 2;
+
+	const CONCERT_RATIO_FORMATION_POS_X = 0.76;
+	const CONCERT_RATIO_FORMATION_POS_Y = 0.44;
+
+	const FORMATION_LIST_LOWS_PER_PAGE = 3;
+	const PAGE_DISPLAY_NUM_FORMATION = 6;
+
+	const MESSAGE_LIST = {
+		NONE : "",
+		TOUCH_00 : "¼±¼ö¸íÀ» ÅÇÇÏ¿© »ó¼¼ Á¤º¸¸¦ È®ÀÎ ÇÏ½Ç ¼ö ÀÖ½À´Ï´Ù.",
+		TOUCH_01 : "°°Àº ¼±¼ö¸¦ ÇÑ ¹ø ´õ ÅÍÄ¡ÇÏ¸é °áÁ¤µË´Ï´Ù.",
+		TOUCH_02 : "±³Ã¼ÇÏ°í ½ÍÀº ¼±¼ö¸¦ ÅÍÄ¡ÇØÁÖ¼¼¿ä.",
+		TOUCH_03 : "ÇÑ ¹ø ´õ ÅÍÄ¡ÇÏ¸é ±³Ã¼ µË´Ï´Ù.",
+		FORMATION_00 : "Æ÷¸ÞÀÌ¼ÇÀ» º¯°æ ÇÕ´Ï´Ù.",
+		TACTICS_00 : "Àü¼úÀ» º¯°æÇÕ´Ï´Ù.",
+		FINISH_00 : "Æí¼ºÀ» Áß´ÜÇÏ°í ¸¶ÀÌÆäÀÌÁö·Î µ¹¾Æ°©´Ï´Ù. ¹Ý¿µÇÏ·Á¸é Æí¼º¿Ï·á¸¦ ÅÇÇØÁÖ¼¼¿ä.",
+	};
+
+	const WINDOW_FOCUS_MAIN = 0;		// àÔâ¢øºà÷
+	const WINDOW_FOCUS_SUB = 1;			// ??????????âú«¦«£«ó«É«¦
+
+	const WINDOW_SCREEN_TEAM_EDIT = 0;		// àÔâ¢øºà÷
+	const WINDOW_SCREEN_FORMATION_INFO = 1;	// «Õ«©?«á?«·«ç«óï×ÜÃ
+
+
+	const CHANGE_INFO_STRING_LIST = {
+		TEAM_EDIT : "Æ÷¸ÞÀÌ¼ÇÁ¤º¸",
+		FORMATION_INFO : "¼±¼öÆí¼º"
+	};
+
+	const RESIZE_FORMATION_NAME_LENGTH = 1;	// «Õ«©«ó«ÈªÎ«ê«µ«¤«ºª¬?ßæª¹ªëÙþí®Öªíþ
+
+	var firstWindowState		= PLAYER_INFO_BOX_STATE_UNSET;
+	var secondWindowState		= PLAYER_INFO_BOX_STATE_UNSET;
+	var firstWindowPlayerPos	= -1;
+	var secondWindowPlayerPos	= -1;
+
+
+	#*--?ßÀªÎà»?ªß?×â--*#
+	var arrImageUrlLoadBackground = new Array();
+
+	function setBackgroundLoadImageUrl( imageUrl ) {
+		arrImageUrlLoadBackground.push( imageUrl );
+	}
+
+	function loadImageBackground() {
+		if ( arrImageUrlLoadBackground.length > 0 ) {
+			var imageUrl = arrImageUrlLoadBackground.shift();
+
+			var imgObj = new Image();
+			imgObj.src = imageUrl;
+
+			setTimeout( loadImageBackground, 100 );
+		}
+	}
+	
+	#set ($formationId = ${teamProfileTbl.formationId})
+	#if( ${temporaryFormationId} )
+		#set ($formationId = ${temporaryFormationId})
+	#end
+
+	#set ($tacticsId = ${teamProfileTbl.tacticsId})
+	#if( ${temporaryTacticsId} )
+		#set ($tacticsId = ${temporaryTacticsId})
+	#end
+
+	#*-----«Õ«©?«á?«·«ç«ó«Ç?«¿-----*#
+	var formation_list = new Array();
+	#foreach( $formation in $formationList )
+		#set( $idx = $velocityCount - 1 )
+		formation_list[ $idx ] = new Array();
+		formation_list[ $idx ][ 'formation_id' ] = ${formation.formationId};
+		formation_list[ $idx ][ 'understand_param' ] = ${coach.getCoachUnderstandTbl(${formation.formationId}).getUnderstandParam()};
+		formation_list[ $idx ][ 'name' ] = "${formation.name}";
+		formation_list[ $idx ][ 'system' ] = "${formation.system}";
+##		formation_list[ $idx ][ 'title' ] = "${formation.title}";
+##		formation_list[ $idx ][ 'detail' ] = "${formation.commentForJavaScript}";
+
+		## àÔ?ª·ªÆª¤ªë«Õ«©?«á?«·«ç«óªÎ«¤«ó«Ç«Ã«¯«¹ªòÜÁðíª·ªÆªªª¯
+		#if( ${formation.formationId} == ${formationId} )
+			#set( $selectFormationIdx = ${idx} );
+			#set( $selectFormationPage = ${selectFormationIdx} / 6 + 1 );
+		#end
+	#end
+	
+	var formationListPage = 1;
+	var formationListPageMax = 0;
+	var formationListSize = 0;
+	var currentFormationId = ${formationId};
+	var currentFormationIndex = -1;
+	var backupFormationId = currentFormationId;
+	var backupFormationIndex = -1;
+	var isLockMoveList = false;
+
+	#*-----?âú«Ç?«¿-----*#
+	var currentTacticsIndex = -1;
+	var backupTacticsIndex = -1;
+
+	#*-----«á«¤«ó«¦«£«ó«É«¦ª««µ«Ö«¦«£«ó«É«¦ª«-----*#
+	var windowFocus = WINDOW_FOCUS_MAIN;
+	#*-----àÔâ¢øºà÷ª««Õ«©?«á?«·«ç«óï×ÜÃª«-----*#
+	var windowScreen = WINDOW_SCREEN_TEAM_EDIT;
+
+	var oldMessageListIndex = "TOUCH_00";
+
+	#**#
+	var timeoutCount = 400;		// àÔâ¢ìýªìôðª¨ªÎ«««¦«ó«¿
+
+#***********************************#
+#*-----??-----*#
+
+
+#*-----ôøÑ¢ûù-----*#
+	window.onload = function() {
+		scrollTo(0, 1);
+
+		#*** page?«««¦«ó«È ***#
+		$("div.formation_card").each( function(e){
+			if ( e % 6 == 0 ) {
+				formationListPageMax++;
+			}
+			formationListSize++;
+		});
+
+		$("div.list_page div.now").text( formationListPage );
+		$("div.list_page div.max").text( formationListPageMax );
+
+		#*-----Ì½ïÒ«Ü«¿«ó?×â-----*#
+		$("form.finish").submit( editTeamOrder_Finish );
+		#*-----«­«ã«ó«»«ë«Ü«¿«ó?×â-----*#
+		$("form.cancel").submit( editTeamOrder_Cancel );
+
+		loadImageBackground();
+
+		setInfomationMsg('TOUCH_00');
+		
+		
+		## «Ç«Õ«©«ë«ÈªÇ«Õ«©?«á?«·«ç«ó«¦«£«ó«É«¦ªòøúãÆª·ªÆªªª¯
+		openFormationWindow();
+		
+		## àÔ?ª·ªÆª¤ªë«Õ«©?«á?«·«ç«óª¬?ØüªËøúãÆªµªìªëªèª¦ªËì¹ÔÑªµª»ªë
+		moveFormationList(${selectFormationPage});
+		
+		loadingStart(1500);
+	};
+
+#*-----«¤«ó«Õ«©«á?«·«ç«ó«á«Ã«»?«¸«»«Ã«È-----*#
+	function setInfomationMsg( messageListIndex ) {
+		var tag = "section.sec_infomation > div";
+		$( tag ).html( MESSAGE_LIST[ messageListIndex ] );
+	}
+
+
+#*-----«Õ«©«á«ê«¹«Èì¹ÔÑ-----*#
+	function moveLeftFormationList() {
+		if ( isLockMoveList ) return;
+
+		if ( formationListPage < formationListPageMax ) {
+			var formationCardWidth = parseInt( $("div.formation_card_row").css("width") );
+			var dLeft = formationCardWidth * FORMATION_LIST_LOWS_PER_PAGE;
+			$("div.list_offset").animate( { 'margin-left': "-=" + dLeft }, { queue:false, duration:500} );
+
+			formationListPage++;
+			$("div.list_page div.now").text( formationListPage );
+
+			lockMoveList();
+			setTimeout( unlockMoveList, 505 );
+		}
+	}
+	function moveRightFormationList() {
+		if ( isLockMoveList ) return;
+
+		if ( formationListPage > 1 ) {
+			var formationCardWidth = parseInt( $("div.formation_card_row").css("width") );
+			var dLeft = formationCardWidth * FORMATION_LIST_LOWS_PER_PAGE;
+			$("div.list_offset").animate( { 'margin-left': "+=" + dLeft }, { queue:false, duration:500} );
+
+			formationListPage--;
+			$("div.list_page div.now").text( formationListPage );
+
+			lockMoveList();
+			setTimeout( unlockMoveList, 505 );
+		}
+	}
+	function lockMoveList() {
+		isLockMoveList = true;
+	}
+	function unlockMoveList() {
+		isLockMoveList = false;
+	}
+
+	## ò¦ïÒ«Ú?«¸ªËì¹ÔÑª¹ªë
+	function moveFormationList( page ) {
+		var formationCardWidth = parseInt( $("div.formation_card_row").css("width") );
+		var dLeft = formationCardWidth * FORMATION_LIST_LOWS_PER_PAGE;
+		
+		$("div.list_offset").animate( { 'margin-left': (dLeft * (page - 1)) * -1 }, { queue:false, duration:500} );
+		formationListPage = page;
+		$("div.list_page div.now").text( formationListPage );
+	}
+
+#*-----«Õ«Ã«¿?«á«Ë«å??×â-----*#
+	#*-----?ªë-----*#
+	function jumpMypage() {
+		var DISPLAY_STRING = MESSAGE_LIST["FINISH_00"];
+		if ( confirm( DISPLAY_STRING ) )
+		{
+			location.href = "$myPageURL";
+		}
+	}
+
+	#*-----«Õ«©?«á?«·«ç«ó-----*#
+	function execFormationSelect() {
+		$("form.select").trigger("submit");
+	}
+	function openFormationWindow() {
+		$("section.sec_window").removeClass("none");
+		$("section.sec_window div.formation").removeClass("none");
+##		backupFormationIndex = -1;
+
+		windowFocus = WINDOW_FOCUS_SUB;
+##		$("div.player_touch").addClass("none");
+		$("section.sec_player").css("visibility", "hidden");
+
+		setInfomationMsg('FORMATION_00');
+	}
+	function selectFormation( index ) {
+		if ( index == currentFormationIndex ) return;
+
+		var currentFormation = formation_list[ index ];
+
+		#*---- àÔ?ï×ÜÃ?ÌÚ ----*#
+		var n = currentFormation['name'];
+		var font_size = 14;
+		if( n.length > RESIZE_FORMATION_NAME_LENGTH )
+		{
+			font_size = 10;
+		}
+		$("div.formation div.current > div.name").text( n ).css("font-size", font_size);
+		$("div.formation div.current > div.system").text( currentFormation['system'] ).css("font-size", font_size);
+		$("div.formation div.current > div.understand_param > div").each( function(e) {
+			if ( e == currentFormation['understand_param'] ) {
+				$(this).removeClass('none');
+			} else {
+				$(this).addClass('none');
+			}
+		});
+
+		$("div.formation_card").eq( currentFormationIndex ).removeClass("select");
+		$("div.formation_card").eq( index ).addClass("select");
+
+		currentFormationIndex = index;
+	}
+	function execEditTeamOrder_Cancel() {
+		$("form.cancel").trigger("submit");
+	}
+	function execEditTeamOrder_Finish() {
+		$("form.finish").trigger("submit");
+	}
+	function editTeamOrder_Cancel() {
+		$("form.cancel > input.fid").val( $formationId );
+		$("form.cancel > input.tid").val( ${tacticsId} );
+		$("form.cancel > input.ae").val( ${selectAutoEdit} );
+		loadingStart(1000);
+	}
+	function editTeamOrder_Finish() {
+		var currentFormation = formation_list[ currentFormationIndex ];
+		currentFormationId = currentFormation['formation_id'];
+		$("form.finish > input.fid").val( currentFormationId );
+		$("form.finish > input.tid").val( ${tacticsId} );
+		$("form.finish > input.ae").val( ${selectAutoEdit} );
+		loadingStart(1000);
+	}
+	
+	var timerID;
+	function loading(){
+		$("#loading_1").toggle();
+		$("#loading_2").toggle();
+	}
+	function loadingStart(endTimeCount) {
+		$("#loading").css("display", "");
+		timerID = setInterval("loading()", 300);
+		setTimeout( "loadingEnd()", endTimeCount);
+	}
+	function loadingEnd() {
+		$("#loading").css("display", "none");
+		clearTimeout( timerID );
+	}
+</script>
